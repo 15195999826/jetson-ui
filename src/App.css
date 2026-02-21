@@ -1,42 +1,73 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+.app {
+  display: flex;
+  width: 1024px;
+  height: 600px;
+  background: #0d0d1a;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* 左侧表情面板 */
+.face-panel {
+  width: 461px; /* 45% of 1024 */
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #0d0d1a;
+  border-right: 1px solid #1e1e2e;
+  position: relative;
+  flex-shrink: 0;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.face-canvas-wrap {
+  width: 320px;
+  height: 320px;
 }
 
-.card {
-  padding: 2em;
+.state-badge {
+  position: absolute;
+  bottom: 20px;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: #333;
+  font-weight: 500;
 }
 
-.read-the-docs {
-  color: #888;
+/* 右侧信息面板 */
+.info-panel {
+  width: 563px; /* 55% of 1024 */
+  height: 600px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* WebSocket 连接状态指示器 */
+.ws-dot {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #333;
+  z-index: 10;
+}
+
+.ws-dot.connected {
+  background: #4caf50;
+}
+
+/* 字幕区：上方 20% */
+.subtitle-section {
+  height: 120px; /* 20% of 600 */
+  border-bottom: 1px solid #1e1e2e;
+  flex-shrink: 0;
+}
+
+/* 聊天记录区：下方 80% */
+.history-section {
+  flex: 1;
+  overflow: hidden;
 }

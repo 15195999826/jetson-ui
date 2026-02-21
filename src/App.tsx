@@ -1,35 +1,39 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { useWebSocket } from './hooks/useWebSocket'
+import { FaceCanvas } from './components/FaceCanvas'
+import { Subtitle } from './components/Subtitle'
+import { ChatHistory } from './components/ChatHistory'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+const WS_URL = `ws://${location.hostname}:8080/ws`
+
+export default function App() {
+  const { state, subtitle, history, connected } = useWebSocket(WS_URL)
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="app">
+      {/* 左：表情区域 */}
+      <div className="face-panel">
+        <div className="face-canvas-wrap">
+          <FaceCanvas state={state} />
+        </div>
+        <div className="state-badge">{state.toUpperCase()}</div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+
+      {/* 右：信息区域 */}
+      <div className="info-panel">
+        {/* 连接状态指示器 */}
+        <div className={`ws-dot ${connected ? 'connected' : ''}`} title={connected ? '已连接' : '未连接'} />
+
+        {/* 字幕区 */}
+        <div className="subtitle-section">
+          <Subtitle text={subtitle} state={state} />
+        </div>
+
+        {/* 聊天记录区 */}
+        <div className="history-section">
+          <ChatHistory history={history} />
+        </div>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </div>
   )
 }
-
-export default App

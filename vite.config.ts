@@ -1,7 +1,22 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
 export default defineConfig({
+  base: './',  // file:// 协议必须
   plugins: [react()],
+  server: {
+    proxy: {
+      '/ws': {
+        target: 'ws://192.168.1.29:8080',
+        ws: true,
+        changeOrigin: true,
+      }
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: { manualChunks: undefined }
+    },
+    cssCodeSplit: false,
+  }
 })
