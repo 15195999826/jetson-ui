@@ -15,7 +15,7 @@ export function FaceCanvas({ state }: Props) {
     clickTimesRef.current.push(now)
     if (clickTimesRef.current.length >= 4) {
       clickTimesRef.current = []
-      fetch('/api/minimize', { method: 'POST' }).catch(() => {})
+      fetch(`http://${location.hostname}:8080/minimize`, { method: 'POST' }).catch(() => {})
     }
   }, [])
 
