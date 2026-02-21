@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { PipelineState } from '../types'
 
 interface Props {
@@ -7,6 +7,17 @@ interface Props {
 
 export function FaceCanvas({ state }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const clickTimesRef = useRef<number[]>([])
+
+  const handleClick = useCallback(() => {
+    const now = Date.now()
+    clickTimesRef.current = clickTimesRef.current.filter(t => now - t < 2000)
+    clickTimesRef.current.push(now)
+    if (clickTimesRef.current.length >= 4) {
+      clickTimesRef.current = []
+      fetch('/api/minimize', { method: 'POST' }).catch(() => {})
+    }
+  }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -167,7 +178,8 @@ export function FaceCanvas({ state }: Props) {
       ref={canvasRef}
       width={320}
       height={320}
-      style={{ width: '100%', height: '100%', display: 'block' }}
+      style={{ width: '100%', height: '100%', display: 'block', cursor: 'pointer' }}
+      onClick={handleClick}
     />
   )
 }

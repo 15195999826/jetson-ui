@@ -2,17 +2,19 @@
 # 在 Jetson 上运行此脚本启动全屏 Dashboard
 # 用法: bash /home/lomo/ui/start-kiosk.sh
 
-# Kill any existing python3 http.server on port 3000
 pkill -f "python3 -m http.server 3000" 2>/dev/null || true
+pkill -f "minimize-server.py" 2>/dev/null || true
 sleep 1
 
-# Start HTTP server in background from UI directory
+export PATH="$HOME/.local/bin:$PATH"
+
 cd /home/lomo/ui
 python3 -m http.server 3000 &
-HTTP_PID=$!
-echo "HTTP server started with PID $HTTP_PID"
+echo "HTTP server started (port 3000)"
 
-# Wait for server to be ready
+DISPLAY=:1 python3 /home/lomo/ui/minimize-server.py &
+echo "Minimize server started (port 5001)"
+
 sleep 2
 
 # Launch Chromium kiosk pointing to localhost
