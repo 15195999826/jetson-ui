@@ -3,6 +3,7 @@
 # 用法: bash /home/lomo/ui/start-kiosk.sh
 
 pkill -f chromium 2>/dev/null || true
+pkill -f "http.server 3000" 2>/dev/null || true
 sleep 1
 
 python3 -m http.server 3000 --directory /home/lomo/ui &
