@@ -21,3 +21,10 @@ export type WsMessage =
   | { type: 'vad_speech_start'; probability: number }
   | { type: 'vad_speech_end'; probability: number }
   | { type: 'error'; text: string }
+  | { type: 'session_switched'; key: string }
+
+export interface SessionInfo {
+  key: string
+  updated_at: string | null
+  created_at: string | null
+}

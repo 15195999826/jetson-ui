@@ -1,16 +1,50 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { PipelineState, ChatMessage, WsMessage } from '../types'
 
+const BASE_HTTP = `http://${location.hostname}:8080`
+
 export function useWebSocket(url: string) {
   const [state, setState] = useState<PipelineState>('idle')
+  const [mode, setMode] = useState<'ptt' | 'natural'>('ptt')
   const [subtitle, setSubtitle] = useState('')
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [connected, setConnected] = useState(false)
+  const [sessionKey, setSessionKey] = useState('voice:local')
 
   const wsRef = useRef<WebSocket | null>(null)
   const retryCountRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef(true)
+
+  const send = useCallback((msg: object) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg))
+    }
+  }, [])
+
+  const sendPttStart = useCallback(() => send({ type: 'ptt_start' }), [send])
+  const sendPttStop = useCallback(() => send({ type: 'ptt_stop' }), [send])
+  const sendSetMode = useCallback((m: 'ptt' | 'natural') => {
+    send({ type: 'set_mode', mode: m })
+  }, [send])
+
+  const switchSession = useCallback(async (key: string) => {
+    send({ type: 'switch_session', key })
+    setSessionKey(key)
+    setHistory([])
+    setSubtitle('')
+    try {
+      const res = await fetch(`${BASE_HTTP}/sessions/${encodeURIComponent(key)}/history`)
+      const data = await res.json()
+      if (data.messages) {
+        setHistory(data.messages.map((m: { role: string; text: string }) => ({
+          role: m.role as 'user' | 'assistant',
+          text: m.text,
+        })))
+      }
+    } catch { /* ignore */ }
+  }, [send])
 
   const connect = useCallback(() => {
     if (!isMountedRef.current) return
@@ -31,6 +65,9 @@ export function useWebSocket(url: string) {
         switch (msg.type) {
           case 'state_changed':
             setState(msg.state)
+            if (msg.mode === 'ptt' || msg.mode === 'natural') {
+              setMode(msg.mode)
+            }
             break
           case 'user_text':
             setHistory(h => [...h, { role: 'user', text: msg.text }])
@@ -47,6 +84,9 @@ export function useWebSocket(url: string) {
             break
           case 'error':
             setHistory(h => [...h, { role: 'assistant', text: `⚠️ ${msg.text}` }])
+            break
+          case 'session_switched':
+            setSessionKey(msg.key)
             break
         }
       } catch {
@@ -79,5 +119,5 @@ export function useWebSocket(url: string) {
     }
   }, [connect])
 
-  return { state, subtitle, history, connected }
+  return { state, mode, subtitle, history, connected, sessionKey, sendPttStart, sendPttStop, sendSetMode, switchSession }
 }
