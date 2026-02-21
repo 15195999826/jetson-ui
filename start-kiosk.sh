@@ -16,6 +16,7 @@ echo "HTTP server started with PID $HTTP_PID"
 sleep 2
 
 # Launch Chromium kiosk pointing to localhost
+# --disable-gpu: required on Jetson to avoid libva GPU init crash
 DISPLAY=:1 chromium-browser \
   --kiosk \
   --no-first-run \
@@ -27,4 +28,6 @@ DISPLAY=:1 chromium-browser \
   --force-device-scale-factor=1 \
   --no-sandbox \
   --disable-session-crashed-bubble \
+  --disable-gpu \
+  --disable-dev-shm-usage \
   "http://localhost:3000/"
