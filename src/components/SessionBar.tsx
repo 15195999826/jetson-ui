@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import type { SessionInfo } from '../types'
 
 interface Props {
@@ -15,33 +15,41 @@ function formatLabel(s: SessionInfo): string {
 }
 
 export function SessionBar({ currentKey, onSwitch }: Props) {
-  const [sessions, setSessions] = useState<SessionInfo[]>([])
+  const [persisted, setPersisted] = useState<SessionInfo[]>([])
+  const pendingRef = useRef<Map<string, string>>(new Map())
+  const [, forceRender] = useState(0)
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch(`${BASE}/sessions`)
       const data = await res.json()
-      setSessions(data.sessions || [])
+      const list: SessionInfo[] = data.sessions || []
+      list.forEach(s => pendingRef.current.delete(s.key))
+      setPersisted(list)
+      forceRender(n => n + 1)
     } catch { /* ignore */ }
   }, [])
 
   useEffect(() => { refresh() }, [refresh])
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     const name = prompt('新会话名称：')
     if (!name?.trim()) return
-    try {
-      const res = await fetch(`${BASE}/sessions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
-      })
-      const data = await res.json()
-      if (data.key) {
-        await refresh()
-        onSwitch(data.key)
-      }
-    } catch { /* ignore */ }
+    const key = `voice:${name.trim()}`
+    pendingRef.current.set(key, `${name.trim()} ✦`)
+    forceRender(n => n + 1)
+    onSwitch(key)
+  }
+
+  const allOptions: { key: string; label: string }[] = [
+    ...persisted.map(s => ({ key: s.key, label: formatLabel(s) })),
+    ...[...pendingRef.current.entries()]
+      .filter(([k]) => !persisted.find(s => s.key === k))
+      .map(([k, label]) => ({ key: k, label })),
+  ]
+
+  if (allOptions.length === 0) {
+    allOptions.push({ key: 'voice:local', label: '默认会话' })
   }
 
   return (
@@ -72,11 +80,8 @@ export function SessionBar({ currentKey, onSwitch }: Props) {
           minWidth: 0,
         }}
       >
-        {sessions.length === 0 && (
-          <option value={currentKey}>{currentKey.replace(/^voice:/, '')}</option>
-        )}
-        {sessions.map(s => (
-          <option key={s.key} value={s.key}>{formatLabel(s)}</option>
+        {allOptions.map(o => (
+          <option key={o.key} value={o.key}>{o.label}</option>
         ))}
       </select>
       <button
