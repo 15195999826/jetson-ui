@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { PipelineState, ChatMessage, WsMessage } from '../types'
+import type { PipelineState, ChatMessage, WsMessage, ChannelType, CommandTipMessage } from '../types'
 
 const BASE_HTTP = location.origin
 
@@ -8,22 +8,26 @@ export interface VadState {
   probability: number
 }
 
-export function useWebSocket(url: string, onSessionUpdated?: (key: string) => void, onSessionDeleted?: (key: string) => void) {
+export function useWebSocket(url: string, onSessionUpdated?: (key: string) => void, onSessionDeleted?: (key: string) => void, onSessionSwitched?: (key: string) => void) {
   const [state, setState] = useState<PipelineState>('idle')
   const [mode, setMode] = useState<'ptt' | 'natural'>('ptt')
   const [subtitle, setSubtitle] = useState('')
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [connected, setConnected] = useState(false)
   const [sessionKey, setSessionKey] = useState('voice:local')
+  const [channel, setChannel] = useState<ChannelType>('voice')
   const [vad, setVad] = useState<VadState>({ isSpeech: false, probability: 0 })
+  const [commandTip, setCommandTip] = useState<CommandTipMessage[] | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const onSessionUpdatedRef = useRef(onSessionUpdated)
   const onSessionDeletedRef = useRef(onSessionDeleted)
+  const onSessionSwitchedRef = useRef(onSessionSwitched)
   const retryCountRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef(true)
   const sessionKeyRef = useRef(sessionKey)
+  const channelRef = useRef<ChannelType>('voice')
 
   const send = useCallback((msg: object) => {
     const ws = wsRef.current
@@ -42,14 +46,13 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     if (trimmed) send({ type: 'text_input', text: trimmed })
   }, [send])
 
-  // 保持 refs 与最新 state/props 同步（避免 onmessage 闭包捕获旧值）
   useEffect(() => { sessionKeyRef.current = sessionKey }, [sessionKey])
+  useEffect(() => { channelRef.current = channel }, [channel])
   useEffect(() => { onSessionUpdatedRef.current = onSessionUpdated }, [onSessionUpdated])
   useEffect(() => { onSessionDeletedRef.current = onSessionDeleted }, [onSessionDeleted])
+  useEffect(() => { onSessionSwitchedRef.current = onSessionSwitched }, [onSessionSwitched])
 
-  const switchSession = useCallback(async (key: string) => {
-    send({ type: 'switch_session', key })
-    setSessionKey(key)
+  const loadSessionHistory = useCallback(async (key: string) => {
     setHistory([])
     setSubtitle('')
     try {
@@ -62,6 +65,21 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
         })))
       }
     } catch { /* ignore */ }
+  }, [])
+
+  const switchSession = useCallback(async (key: string) => {
+    send({ type: 'switch_session', key })
+    setSessionKey(key)
+    await loadSessionHistory(key)
+  }, [send, loadSessionHistory])
+
+  const switchChannel = useCallback((ch: ChannelType) => {
+    send({ type: 'set_channel', channel: ch })
+  }, [send])
+
+  const cancelCommand = useCallback(() => {
+    send({ type: 'cancel_command' })
+    setCommandTip(null)
   }, [send])
 
   const connect = useCallback(() => {
@@ -108,16 +126,35 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
             setHistory(h => [...h, { role: 'assistant', text: `⚠️ ${msg.text}` }])
             break
           case 'session_init':
-            send({ type: 'switch_session', key: sessionKeyRef.current })
+            // Server is authoritative for voice channel session.
+            // Accept the server's current session instead of pushing our local key.
+            setSessionKey(msg.current)
+            sessionKeyRef.current = msg.current
+            loadSessionHistory(msg.current)
             break
           case 'session_switched':
             setSessionKey(msg.key)
+            sessionKeyRef.current = msg.key
+            loadSessionHistory(msg.key)
+            onSessionSwitchedRef.current?.(msg.key)
+            break
+          case 'channel_switched':
+            setChannel(msg.channel)
+            channelRef.current = msg.channel
+            if (msg.session_key) {
+              setSessionKey(msg.session_key)
+              sessionKeyRef.current = msg.session_key
+              loadSessionHistory(msg.session_key)
+            }
             break
           case 'session_updated':
             onSessionUpdatedRef.current?.(msg.key)
             break
           case 'session_deleted':
             onSessionDeletedRef.current?.(msg.key)
+            break
+          case 'command_tip':
+            setCommandTip(prev => [...(prev ?? []), { role: msg.role, text: msg.text }])
             break
           case 'vad_speech_start':
             setVad({ isSpeech: true, probability: msg.probability })
@@ -138,7 +175,6 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
       if (!isMountedRef.current) return
       setConnected(false)
       wsRef.current = null
-      // 指数退避重连：1s → 2s → 4s → ... → 30s
       const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
       retryCountRef.current += 1
       retryTimerRef.current = setTimeout(connect, delay)
@@ -147,7 +183,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     ws.onerror = () => {
       ws.close()
     }
-  }, [url])
+  }, [url, loadSessionHistory])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -159,5 +195,5 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     }
   }, [connect])
 
-  return { state, mode, subtitle, history, connected, sessionKey, vad, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession }
+  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand }
 }

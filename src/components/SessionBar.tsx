@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef, type MutableRefObject } from 'react'
-import type { SessionInfo } from '../types'
+import type { SessionInfo, ChannelType } from '../types'
 
 interface Props {
   currentKey: string
+  channel: ChannelType
   onSwitch: (key: string) => void
   notifyRef?: MutableRefObject<((key: string) => void) | null>
   deleteNotifyRef?: MutableRefObject<((key: string) => void) | null>
@@ -16,8 +17,9 @@ function formatLabel(s: SessionInfo): string {
   return date ? `${name} (${date})` : name
 }
 
-export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }: Props) {
+export function SessionBar({ currentKey, channel, onSwitch, notifyRef, deleteNotifyRef }: Props) {
   const [persisted, setPersisted] = useState<SessionInfo[]>([])
+  const [voiceSessionKey, setVoiceSessionKey] = useState<string | null>(null)
   const pendingRef = useRef<Map<string, string>>(new Map())
   const [, forceRender] = useState(0)
   const currentKeyRef = useRef(currentKey)
@@ -30,6 +32,7 @@ export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }:
       const list: SessionInfo[] = data.sessions || []
       list.forEach(s => pendingRef.current.delete(s.key))
       setPersisted(list)
+      if (data.current) setVoiceSessionKey(data.current)
       forceRender(n => n + 1)
     } catch { /* ignore */ }
   }, [])
@@ -41,6 +44,7 @@ export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }:
       const data = await res.json()
       const list: SessionInfo[] = data.sessions || []
       setPersisted(list)
+      if (data.current) setVoiceSessionKey(data.current)
       forceRender(n => n + 1)
 
       if (list.length > 0) {
@@ -110,16 +114,18 @@ export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }:
     } catch { /* ignore */ }
   }
 
-  const allOptions: { key: string; label: string }[] = [
-    ...persisted.map(s => ({ key: s.key, label: formatLabel(s) })),
+  const allOptions: { key: string; label: string; voiceOccupied: boolean }[] = [
+    ...persisted.map(s => ({ key: s.key, label: formatLabel(s), voiceOccupied: s.key === voiceSessionKey })),
     ...[...pendingRef.current.entries()]
       .filter(([k]) => !persisted.find(s => s.key === k))
-      .map(([k, label]) => ({ key: k, label })),
+      .map(([k, label]) => ({ key: k, label, voiceOccupied: k === voiceSessionKey })),
   ]
 
   if (allOptions.length === 0) {
-    allOptions.push({ key: 'voice:local', label: '默认会话' })
+    allOptions.push({ key: 'voice:local', label: '默认会话', voiceOccupied: 'voice:local' === voiceSessionKey })
   }
+
+  const isKeyboard = channel === 'keyboard'
 
   return (
     <div style={{
@@ -135,7 +141,11 @@ export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }:
       <span style={{ fontSize: 11, color: '#444', flexShrink: 0 }}>会话</span>
       <select
         value={currentKey}
-        onChange={e => onSwitch(e.target.value)}
+        onChange={e => {
+          const key = e.target.value
+          if (isKeyboard && key === voiceSessionKey) return
+          onSwitch(key)
+        }}
         style={{
           flex: 1,
           background: '#111120',
@@ -150,7 +160,9 @@ export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }:
         }}
       >
         {allOptions.map(o => (
-          <option key={o.key} value={o.key}>{o.label}</option>
+          <option key={o.key} value={o.key} disabled={isKeyboard && o.voiceOccupied}>
+            {o.label}{isKeyboard && o.voiceOccupied ? ' 🎙' : ''}
+          </option>
         ))}
       </select>
       <button

@@ -7,6 +7,7 @@ import { ChatHistory } from './components/ChatHistory'
 import { SessionBar } from './components/SessionBar'
 import { VadRing } from './components/VadRing'
 import { TextInput } from './components/TextInput'
+import { CommandTip } from './components/CommandTip'
 import './App.css'
 
 const WS_URL = `ws://${location.host}/ws`
@@ -24,7 +25,11 @@ export default function App() {
     sessionBarDeleteRef.current?.(key)
   }, [])
 
-  const { state, mode, subtitle, history, connected, sessionKey, vad, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted)
+  const handleSessionSwitched = useCallback((key: string) => {
+    sessionBarNotifyRef.current?.(key)
+  }, [])
+
+  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
 
   // PTT 长按：防止 touch + mouse 双触发
   const pttActiveRef = useRef(false)
@@ -61,6 +66,7 @@ export default function App() {
 
   return (
     <div className={`app ${platform}`}>
+      {commandTip && <CommandTip messages={commandTip} onClose={cancelCommand} />}
       <div className="face-panel">
         <div className="face-canvas-wrap">
           <FaceCanvas state={state} />
@@ -90,7 +96,40 @@ export default function App() {
       <div className="info-panel">
         <div className={`ws-dot ${connected ? 'connected' : ''}`} title={connected ? '已连接' : '未连接'} />
 
-        <SessionBar currentKey={sessionKey} onSwitch={switchSession} notifyRef={sessionBarNotifyRef} deleteNotifyRef={sessionBarDeleteRef} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 0, flexShrink: 0 }}>
+          <button
+            onClick={() => switchChannel('voice')}
+            title="Voice channel — 共享 pipeline，所有端同步同一会话"
+            style={{
+              padding: '3px 10px',
+              fontSize: 11,
+              border: '1px solid #2a2a3e',
+              borderRight: 'none',
+              borderRadius: '4px 0 0 4px',
+              background: channel === 'voice' ? '#1e3a5e' : '#0a0a14',
+              color: channel === 'voice' ? '#90caf9' : '#444',
+              cursor: 'pointer',
+            }}
+          >
+            🎙 Voice
+          </button>
+          <button
+            onClick={() => switchChannel('keyboard')}
+            title="Keyboard channel — 独立会话，支持并行（开发中）"
+            style={{
+              padding: '3px 10px',
+              fontSize: 11,
+              border: '1px solid #2a2a3e',
+              borderRadius: '0 4px 4px 0',
+              background: channel === 'keyboard' ? '#1e3a5e' : '#0a0a14',
+              color: channel === 'keyboard' ? '#90caf9' : '#444',
+              cursor: 'pointer',
+            }}
+          >
+            ⌨ Keyboard
+          </button>
+        </div>
+        <SessionBar currentKey={sessionKey} channel={channel} onSwitch={switchSession} notifyRef={sessionBarNotifyRef} deleteNotifyRef={sessionBarDeleteRef} />
 
         {platform === 'desktop' ? (
           <>

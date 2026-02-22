@@ -6,12 +6,22 @@ export type PipelineState =
   | 'thinking'
   | 'responding'
 
+// Channel types:
+//   voice    - shared pipeline, all clients follow the same session
+//   keyboard - per-connection independent session (parallel, placeholder)
+export type ChannelType = 'voice' | 'keyboard'
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   text: string
 }
 
 // WebSocket 消息类型（匹配 pipeline.py 广播的事件）
+export interface CommandTipMessage {
+  role: 'user' | 'assistant'
+  text: string
+}
+
 export type WsMessage =
   | { type: 'state_changed'; state: PipelineState; mode: string; info?: string }
   | { type: 'user_text'; text: string; session_key?: string }
@@ -25,6 +35,8 @@ export type WsMessage =
   | { type: 'session_updated'; key: string }
   | { type: 'session_deleted'; key: string }
   | { type: 'session_init'; current: string }
+  | { type: 'channel_switched'; channel: ChannelType; session_key?: string }
+  | { type: 'command_tip'; role: 'user' | 'assistant'; text: string }
 
 export interface SessionInfo {
   key: string
