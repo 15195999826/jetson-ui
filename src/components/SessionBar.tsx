@@ -1,12 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, type MutableRefObject } from 'react'
 import type { SessionInfo } from '../types'
 
 interface Props {
   currentKey: string
   onSwitch: (key: string) => void
+  notifyRef?: MutableRefObject<((key: string) => void) | null>
 }
 
-const BASE = `http://${location.hostname}:8080`
+const BASE = location.origin
 
 function formatLabel(s: SessionInfo): string {
   const name = s.key.replace(/^voice:/, '')
@@ -14,7 +15,7 @@ function formatLabel(s: SessionInfo): string {
   return date ? `${name} (${date})` : name
 }
 
-export function SessionBar({ currentKey, onSwitch }: Props) {
+export function SessionBar({ currentKey, onSwitch, notifyRef }: Props) {
   const [persisted, setPersisted] = useState<SessionInfo[]>([])
   const pendingRef = useRef<Map<string, string>>(new Map())
   const [, forceRender] = useState(0)
@@ -32,6 +33,20 @@ export function SessionBar({ currentKey, onSwitch }: Props) {
 
   useEffect(() => { refresh() }, [refresh])
 
+  useEffect(() => {
+    if (!notifyRef) return
+    notifyRef.current = (key: string) => {
+      const alreadyKnown =
+        persisted.some(s => s.key === key) || pendingRef.current.has(key)
+      if (!alreadyKnown) {
+        pendingRef.current.set(key, key.replace(/^voice:/, '') + ' ✦')
+        forceRender(n => n + 1)
+      }
+      refresh()
+    }
+    return () => { if (notifyRef) notifyRef.current = null }
+  }, [notifyRef, persisted, refresh])
+
   const handleCreate = () => {
     const name = prompt('新会话名称：')
     if (!name?.trim()) return
@@ -39,6 +54,20 @@ export function SessionBar({ currentKey, onSwitch }: Props) {
     pendingRef.current.set(key, `${name.trim()} ✦`)
     forceRender(n => n + 1)
     onSwitch(key)
+  }
+
+  const handleDelete = async () => {
+    if (!currentKey || currentKey === 'voice:local') return
+    const name = currentKey.replace(/^voice:/, '')
+    if (!confirm(`删除会话「${name}」？`)) return
+    try {
+      const res = await fetch(`${BASE}/sessions/${encodeURIComponent(currentKey)}`, { method: 'DELETE' })
+      if (res.ok) {
+        pendingRef.current.delete(currentKey)
+        onSwitch('voice:local')
+        await refresh()
+      }
+    } catch { /* ignore */ }
   }
 
   const allOptions: { key: string; label: string }[] = [
@@ -86,6 +115,7 @@ export function SessionBar({ currentKey, onSwitch }: Props) {
       </select>
       <button
         onClick={handleCreate}
+        title="新建会话"
         style={{
           background: '#1e2a3e',
           border: '1px solid #2d5a8e',
@@ -99,6 +129,42 @@ export function SessionBar({ currentKey, onSwitch }: Props) {
         }}
       >
         ＋
+      </button>
+      <button
+        onClick={handleDelete}
+        title="删除当前会话"
+        disabled={currentKey === 'voice:local'}
+        style={{
+          background: currentKey === 'voice:local' ? '#111' : '#2e1a1a',
+          border: `1px solid ${currentKey === 'voice:local' ? '#222' : '#8e2d2d'}`,
+          borderRadius: 4,
+          color: currentKey === 'voice:local' ? '#444' : '#f99090',
+          fontSize: 11,
+          padding: '2px 8px',
+          cursor: currentKey === 'voice:local' ? 'not-allowed' : 'pointer',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+          opacity: currentKey === 'voice:local' ? 0.5 : 1,
+        }}
+      >
+        ✕
+      </button>
+      <button
+        onClick={refresh}
+        title="刷新会话列表"
+        style={{
+          background: '#1a1a2e',
+          border: '1px solid #2a2a3e',
+          borderRadius: 4,
+          color: '#666',
+          fontSize: 13,
+          padding: '2px 6px',
+          cursor: 'pointer',
+          flexShrink: 0,
+          lineHeight: 1,
+        }}
+      >
+        ↺
       </button>
     </div>
   )

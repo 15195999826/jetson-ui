@@ -1,20 +1,28 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { PipelineState, ChatMessage, WsMessage } from '../types'
 
-const BASE_HTTP = `http://${location.hostname}:8080`
+const BASE_HTTP = location.origin
 
-export function useWebSocket(url: string) {
+export interface VadState {
+  isSpeech: boolean
+  probability: number
+}
+
+export function useWebSocket(url: string, onSessionUpdated?: (key: string) => void) {
   const [state, setState] = useState<PipelineState>('idle')
   const [mode, setMode] = useState<'ptt' | 'natural'>('ptt')
   const [subtitle, setSubtitle] = useState('')
   const [history, setHistory] = useState<ChatMessage[]>([])
   const [connected, setConnected] = useState(false)
   const [sessionKey, setSessionKey] = useState('voice:local')
+  const [vad, setVad] = useState<VadState>({ isSpeech: false, probability: 0 })
 
   const wsRef = useRef<WebSocket | null>(null)
+  const onSessionUpdatedRef = useRef(onSessionUpdated)
   const retryCountRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef(true)
+  const sessionKeyRef = useRef(sessionKey)
 
   const send = useCallback((msg: object) => {
     const ws = wsRef.current
@@ -28,6 +36,14 @@ export function useWebSocket(url: string) {
   const sendSetMode = useCallback((m: 'ptt' | 'natural') => {
     send({ type: 'set_mode', mode: m })
   }, [send])
+  const sendText = useCallback((text: string) => {
+    const trimmed = text.trim()
+    if (trimmed) send({ type: 'text_input', text: trimmed })
+  }, [send])
+
+  // 保持 refs 与最新 state/props 同步（避免 onmessage 闭包捕获旧值）
+  useEffect(() => { sessionKeyRef.current = sessionKey }, [sessionKey])
+  useEffect(() => { onSessionUpdatedRef.current = onSessionUpdated }, [onSessionUpdated])
 
   const switchSession = useCallback(async (key: string) => {
     send({ type: 'switch_session', key })
@@ -70,23 +86,53 @@ export function useWebSocket(url: string) {
             }
             break
           case 'user_text':
-            setHistory(h => [...h, { role: 'user', text: msg.text }])
-            setSubtitle('')
+            if (!msg.session_key || msg.session_key === sessionKeyRef.current) {
+              setHistory(h => [...h, { role: 'user', text: msg.text }])
+              setSubtitle('')
+            }
             break
           case 'assistant_chunk':
-            if (!msg.done) {
-              setSubtitle(s => s + msg.text)
+            if (!msg.session_key || msg.session_key === sessionKeyRef.current) {
+              if (!msg.done) setSubtitle(s => s + msg.text)
             }
             break
           case 'assistant_text':
-            setHistory(h => [...h, { role: 'assistant', text: msg.text }])
-            setSubtitle('')
+            if (!msg.session_key || msg.session_key === sessionKeyRef.current) {
+              setHistory(h => [...h, { role: 'assistant', text: msg.text }])
+              setSubtitle('')
+            }
             break
           case 'error':
             setHistory(h => [...h, { role: 'assistant', text: `⚠️ ${msg.text}` }])
             break
+          case 'session_init':
+            send({ type: 'switch_session', key: sessionKeyRef.current })
+            break
           case 'session_switched':
             setSessionKey(msg.key)
+            break
+          case 'session_updated':
+            onSessionUpdatedRef.current?.(msg.key)
+            break
+          case 'session_deleted':
+            // If the deleted session is the one we're viewing, switch to default
+            if (msg.key === sessionKeyRef.current) {
+              setSessionKey('voice:local')
+              setHistory([])
+              setSubtitle('')
+              send({ type: 'switch_session', key: 'voice:local' })
+            }
+            // Notify SessionBar to refresh the list for all clients
+            onSessionUpdatedRef.current?.(msg.key)
+            break
+          case 'vad_speech_start':
+            setVad({ isSpeech: true, probability: msg.probability })
+            break
+          case 'vad_speech_end':
+            setVad({ isSpeech: false, probability: msg.probability })
+            break
+          case 'vad_status':
+            setVad(v => ({ ...v, probability: msg.probability }))
             break
         }
       } catch {
@@ -119,5 +165,5 @@ export function useWebSocket(url: string) {
     }
   }, [connect])
 
-  return { state, mode, subtitle, history, connected, sessionKey, sendPttStart, sendPttStop, sendSetMode, switchSession }
+  return { state, mode, subtitle, history, connected, sessionKey, vad, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession }
 }
