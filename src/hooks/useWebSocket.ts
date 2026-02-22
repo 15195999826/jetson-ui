@@ -8,7 +8,7 @@ export interface VadState {
   probability: number
 }
 
-export function useWebSocket(url: string, onSessionUpdated?: (key: string) => void) {
+export function useWebSocket(url: string, onSessionUpdated?: (key: string) => void, onSessionDeleted?: (key: string) => void) {
   const [state, setState] = useState<PipelineState>('idle')
   const [mode, setMode] = useState<'ptt' | 'natural'>('ptt')
   const [subtitle, setSubtitle] = useState('')
@@ -19,6 +19,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
 
   const wsRef = useRef<WebSocket | null>(null)
   const onSessionUpdatedRef = useRef(onSessionUpdated)
+  const onSessionDeletedRef = useRef(onSessionDeleted)
   const retryCountRef = useRef(0)
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef(true)
@@ -44,6 +45,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
   // 保持 refs 与最新 state/props 同步（避免 onmessage 闭包捕获旧值）
   useEffect(() => { sessionKeyRef.current = sessionKey }, [sessionKey])
   useEffect(() => { onSessionUpdatedRef.current = onSessionUpdated }, [onSessionUpdated])
+  useEffect(() => { onSessionDeletedRef.current = onSessionDeleted }, [onSessionDeleted])
 
   const switchSession = useCallback(async (key: string) => {
     send({ type: 'switch_session', key })
@@ -115,15 +117,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
             onSessionUpdatedRef.current?.(msg.key)
             break
           case 'session_deleted':
-            // If the deleted session is the one we're viewing, switch to default
-            if (msg.key === sessionKeyRef.current) {
-              setSessionKey('voice:local')
-              setHistory([])
-              setSubtitle('')
-              send({ type: 'switch_session', key: 'voice:local' })
-            }
-            // Notify SessionBar to refresh the list for all clients
-            onSessionUpdatedRef.current?.(msg.key)
+            onSessionDeletedRef.current?.(msg.key)
             break
           case 'vad_speech_start':
             setVad({ isSpeech: true, probability: msg.probability })

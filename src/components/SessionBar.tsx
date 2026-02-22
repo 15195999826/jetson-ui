@@ -5,6 +5,7 @@ interface Props {
   currentKey: string
   onSwitch: (key: string) => void
   notifyRef?: MutableRefObject<((key: string) => void) | null>
+  deleteNotifyRef?: MutableRefObject<((key: string) => void) | null>
 }
 
 const BASE = location.origin
@@ -15,10 +16,12 @@ function formatLabel(s: SessionInfo): string {
   return date ? `${name} (${date})` : name
 }
 
-export function SessionBar({ currentKey, onSwitch, notifyRef }: Props) {
+export function SessionBar({ currentKey, onSwitch, notifyRef, deleteNotifyRef }: Props) {
   const [persisted, setPersisted] = useState<SessionInfo[]>([])
   const pendingRef = useRef<Map<string, string>>(new Map())
   const [, forceRender] = useState(0)
+  const currentKeyRef = useRef(currentKey)
+  currentKeyRef.current = currentKey
 
   const refresh = useCallback(async () => {
     try {
@@ -31,7 +34,46 @@ export function SessionBar({ currentKey, onSwitch, notifyRef }: Props) {
     } catch { /* ignore */ }
   }, [])
 
+  const switchAfterDelete = useCallback(async (deletedKey: string) => {
+    pendingRef.current.delete(deletedKey)
+    try {
+      const res = await fetch(`${BASE}/sessions`)
+      const data = await res.json()
+      const list: SessionInfo[] = data.sessions || []
+      setPersisted(list)
+      forceRender(n => n + 1)
+
+      if (list.length > 0) {
+        const sorted = [...list].sort((a, b) => {
+          const ta = a.updated_at || a.created_at || ''
+          const tb = b.updated_at || b.created_at || ''
+          return tb.localeCompare(ta)
+        })
+        onSwitch(sorted[0].key)
+      } else {
+        const key = 'voice:auto_new'
+        pendingRef.current.set(key, 'auto_new ✦')
+        forceRender(n => n + 1)
+        onSwitch(key)
+      }
+    } catch {
+      onSwitch('voice:auto_new')
+    }
+  }, [onSwitch])
+
   useEffect(() => { refresh() }, [refresh])
+
+  useEffect(() => {
+    if (!deleteNotifyRef) return
+    deleteNotifyRef.current = (deletedKey: string) => {
+      if (deletedKey === currentKeyRef.current) {
+        switchAfterDelete(deletedKey)
+      } else {
+        refresh()
+      }
+    }
+    return () => { if (deleteNotifyRef) deleteNotifyRef.current = null }
+  }, [deleteNotifyRef, switchAfterDelete, refresh])
 
   useEffect(() => {
     if (!notifyRef) return
@@ -57,15 +99,13 @@ export function SessionBar({ currentKey, onSwitch, notifyRef }: Props) {
   }
 
   const handleDelete = async () => {
-    if (!currentKey || currentKey === 'voice:local') return
+    if (!currentKey) return
     const name = currentKey.replace(/^voice:/, '')
     if (!confirm(`删除会话「${name}」？`)) return
     try {
       const res = await fetch(`${BASE}/sessions/${encodeURIComponent(currentKey)}`, { method: 'DELETE' })
       if (res.ok) {
-        pendingRef.current.delete(currentKey)
-        onSwitch('voice:local')
-        await refresh()
+        await switchAfterDelete(currentKey)
       }
     } catch { /* ignore */ }
   }
@@ -133,18 +173,16 @@ export function SessionBar({ currentKey, onSwitch, notifyRef }: Props) {
       <button
         onClick={handleDelete}
         title="删除当前会话"
-        disabled={currentKey === 'voice:local'}
         style={{
-          background: currentKey === 'voice:local' ? '#111' : '#2e1a1a',
-          border: `1px solid ${currentKey === 'voice:local' ? '#222' : '#8e2d2d'}`,
+          background: '#2e1a1a',
+          border: '1px solid #8e2d2d',
           borderRadius: 4,
-          color: currentKey === 'voice:local' ? '#444' : '#f99090',
+          color: '#f99090',
           fontSize: 11,
           padding: '2px 8px',
-          cursor: currentKey === 'voice:local' ? 'not-allowed' : 'pointer',
+          cursor: 'pointer',
           flexShrink: 0,
           whiteSpace: 'nowrap',
-          opacity: currentKey === 'voice:local' ? 0.5 : 1,
         }}
       >
         ✕
