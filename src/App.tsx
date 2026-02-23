@@ -8,6 +8,8 @@ import { SessionBar } from './components/SessionBar'
 import { VadRing } from './components/VadRing'
 import { TextInput } from './components/TextInput'
 import { CommandTip } from './components/CommandTip'
+import { Toast } from './components/Toast'
+import { TaskIndicator } from './components/TaskIndicator'
 import './App.css'
 
 const WS_URL = `ws://${location.host}/ws`
@@ -29,7 +31,7 @@ export default function App() {
     sessionBarNotifyRef.current?.(key)
   }, [])
 
-  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
+  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
 
   // PTT 长按：防止 touch + mouse 双触发
   const pttActiveRef = useRef(false)
@@ -66,6 +68,7 @@ export default function App() {
 
   return (
     <div className={`app ${platform}`}>
+      <Toast message={toast} />
       {commandTip && <CommandTip messages={commandTip} onClose={cancelCommand} />}
       <div className="face-panel">
         <div className="face-canvas-wrap">
@@ -130,6 +133,7 @@ export default function App() {
           </button>
         </div>
         <SessionBar currentKey={sessionKey} channel={channel} onSwitch={switchSession} notifyRef={sessionBarNotifyRef} deleteNotifyRef={sessionBarDeleteRef} />
+        <TaskIndicator tasks={backgroundTasks} />
 
         {platform === 'desktop' ? (
           <>

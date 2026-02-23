@@ -37,6 +37,14 @@ export type WsMessage =
   | { type: 'session_init'; current: string }
   | { type: 'channel_switched'; channel: ChannelType; session_key?: string }
   | { type: 'command_tip'; role: 'user' | 'assistant'; text: string }
+  | { type: 'task_started'; task_id: string; description: string }
+  | { type: 'task_completed_other_session'; task_id: string; session_key: string; status: string }
+
+export interface BackgroundTask {
+  taskId: string
+  description: string
+  status: 'running' | 'completed' | 'error'
+}
 
 export interface SessionInfo {
   key: string

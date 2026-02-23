@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { PipelineState, ChatMessage, WsMessage, ChannelType, CommandTipMessage } from '../types'
+import type { PipelineState, ChatMessage, WsMessage, ChannelType, CommandTipMessage, BackgroundTask } from '../types'
 
 const BASE_HTTP = location.origin
 
@@ -18,6 +18,8 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
   const [channel, setChannel] = useState<ChannelType>('voice')
   const [vad, setVad] = useState<VadState>({ isSpeech: false, probability: 0 })
   const [commandTip, setCommandTip] = useState<CommandTipMessage[] | null>(null)
+  const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([])
+  const [toast, setToast] = useState<string | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const onSessionUpdatedRef = useRef(onSessionUpdated)
@@ -165,6 +167,22 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
           case 'vad_status':
             setVad(v => ({ ...v, probability: msg.probability }))
             break
+          case 'task_started':
+            setBackgroundTasks(prev => [
+              ...prev,
+              { taskId: msg.task_id, description: msg.description, status: 'running' }
+            ])
+            break
+          case 'task_completed_other_session':
+            setBackgroundTasks(prev =>
+              prev.map(t => t.taskId === msg.task_id
+                ? { ...t, status: msg.status === 'ok' ? 'completed' : 'error' }
+                : t
+              )
+            )
+            setToast(`后台任务已${msg.status === 'ok' ? '完成' : '失败'}，切换到原会话查看结果`)
+            setTimeout(() => setToast(null), 5000)
+            break
         }
       } catch {
         // ignore malformed messages
@@ -195,5 +213,5 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     }
   }, [connect])
 
-  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand }
+  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand }
 }
