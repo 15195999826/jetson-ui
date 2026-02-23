@@ -39,6 +39,7 @@ export type WsMessage =
   | { type: 'command_tip'; role: 'user' | 'assistant'; text: string }
   | { type: 'task_started'; task_id: string; description: string }
   | { type: 'task_completed_other_session'; task_id: string; session_key: string; status: string }
+  | { type: 'task_completed'; task_id: string; session_key: string; status: string }
 
 export interface BackgroundTask {
   taskId: string

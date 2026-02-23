@@ -183,6 +183,11 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
             setToast(`后台任务已${msg.status === 'ok' ? '完成' : '失败'}，切换到原会话查看结果`)
             setTimeout(() => setToast(null), 5000)
             break
+          case 'task_completed':
+            setBackgroundTasks(prev =>
+              prev.filter(t => t.taskId !== msg.task_id)
+            )
+            break
         }
       } catch {
         // ignore malformed messages
