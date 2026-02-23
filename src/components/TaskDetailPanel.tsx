@@ -210,11 +210,15 @@ export function TaskDetailPanel({ task, onClose, onAbort }: Props) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {msg.parts.map((part, partIndex) => (
                     part.type === 'tool-invocation' ? (
-                      <div key={`part-${partIndex}`} style={{ fontSize: 12, color: '#888' }}>
-                        ├ {part.toolName ?? 'tool'} ({part.state ?? 'pending'})
+                      <div key={`part-${partIndex}`} style={{ fontSize: 12, color: '#888', padding: '2px 0' }}>
+                        🔧 {part.toolName ?? 'tool'} ({part.state ?? 'pending'})
+                      </div>
+                    ) : part.type === 'reasoning' ? (
+                      <div key={`part-${partIndex}`} style={{ fontSize: 11, color: '#666', lineHeight: 1.5, fontStyle: 'italic', borderLeft: '2px solid #333', paddingLeft: 8 }}>
+                        💭 {part.text}
                       </div>
                     ) : (
-                      <div key={`part-${partIndex}`} style={{ fontSize: 12, color: '#e0e0e0', lineHeight: 1.6 }}>
+                      <div key={`part-${partIndex}`} style={{ fontSize: 12, color: '#e0e0e0', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                         {part.text}
                       </div>
                     )
