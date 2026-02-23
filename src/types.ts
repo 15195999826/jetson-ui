@@ -45,6 +45,28 @@ export interface BackgroundTask {
   taskId: string
   description: string
   status: 'running' | 'completed' | 'error'
+  startedAt?: number
+  ocSessionId?: string | null
+}
+
+export interface OcTodo {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  priority: 'high' | 'medium' | 'low'
+}
+
+export interface OcPart {
+  type: 'text' | 'tool-invocation' | string
+  text?: string
+  toolName?: string
+  state?: 'pending' | 'running' | 'completed' | 'error' | string
+  input?: Record<string, unknown>
+  output?: string
+}
+
+export interface OcMessage {
+  role: 'user' | 'assistant'
+  parts: OcPart[]
 }
 
 export interface SessionInfo {

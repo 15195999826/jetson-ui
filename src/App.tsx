@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWebSocket } from './hooks/useWebSocket'
 import { usePlatform } from './hooks/usePlatform'
 import { FaceCanvas } from './components/FaceCanvas'
@@ -10,7 +10,9 @@ import { TextInput } from './components/TextInput'
 import { CommandTip } from './components/CommandTip'
 import { Toast } from './components/Toast'
 import { TaskIndicator } from './components/TaskIndicator'
+import { TaskDetailPanel } from './components/TaskDetailPanel'
 import './App.css'
+import type { BackgroundTask } from './types'
 
 const WS_URL = `ws://${location.host}/ws`
 
@@ -31,7 +33,9 @@ export default function App() {
     sessionBarNotifyRef.current?.(key)
   }, [])
 
-  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
+  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand, removeBackgroundTask } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
+  const [detailTask, setDetailTask] = useState<BackgroundTask | null>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // PTT 长按：防止 touch + mouse 双触发
   const pttActiveRef = useRef(false)
@@ -65,6 +69,46 @@ export default function App() {
       </div>
     </div>
   )
+
+  const handleAbort = useCallback(async (ocSessionId: string) => {
+    try {
+      await fetch(`${location.origin}/oc/session/${encodeURIComponent(ocSessionId)}/abort`, { method: 'POST' })
+    } catch {
+    }
+    if (detailTask) {
+      removeBackgroundTask(detailTask.taskId)
+      setDetailTask(null)
+    }
+  }, [detailTask, removeBackgroundTask])
+
+  useEffect(() => {
+    if (!detailTask) return
+    const latest = backgroundTasks.find(t => t.taskId === detailTask.taskId)
+    if (latest && latest.status === 'running') {
+      setDetailTask(latest)
+      return
+    }
+    if (latest && latest.status !== 'running') {
+      setDetailTask(latest)
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = setTimeout(() => {
+        setDetailTask(null)
+        removeBackgroundTask(latest.taskId)
+      }, 3000)
+    }
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    }
+  }, [backgroundTasks, detailTask?.taskId, detailTask?.status, removeBackgroundTask])
+
+  useEffect(() => {
+    if (!backgroundTasks.length) return
+    backgroundTasks.forEach(task => {
+      if (task.status !== 'running' && (!detailTask || detailTask.taskId !== task.taskId)) {
+        removeBackgroundTask(task.taskId)
+      }
+    })
+  }, [backgroundTasks, detailTask?.taskId, removeBackgroundTask])
 
   return (
     <div className={`app ${platform}`}>
@@ -133,7 +177,7 @@ export default function App() {
           </button>
         </div>
         <SessionBar currentKey={sessionKey} channel={channel} onSwitch={switchSession} notifyRef={sessionBarNotifyRef} deleteNotifyRef={sessionBarDeleteRef} />
-        <TaskIndicator tasks={backgroundTasks} />
+        <TaskIndicator tasks={backgroundTasks} onViewDetail={setDetailTask} />
 
         {platform === 'desktop' ? (
           <>
@@ -157,6 +201,13 @@ export default function App() {
           </>
         )}
       </div>
+      {detailTask && (
+        <TaskDetailPanel
+          task={detailTask}
+          onClose={() => setDetailTask(null)}
+          onAbort={handleAbort}
+        />
+      )}
     </div>
   )
 }

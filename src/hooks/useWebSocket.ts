@@ -84,6 +84,10 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     setCommandTip(null)
   }, [send])
 
+  const removeBackgroundTask = useCallback((taskId: string) => {
+    setBackgroundTasks(prev => prev.filter(t => t.taskId !== taskId))
+  }, [])
+
   const connect = useCallback(() => {
     if (!isMountedRef.current) return
 
@@ -170,7 +174,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
           case 'task_started':
             setBackgroundTasks(prev => [
               ...prev,
-              { taskId: msg.task_id, description: msg.description, status: 'running' }
+              { taskId: msg.task_id, description: msg.description, status: 'running', startedAt: Math.floor(Date.now() / 1000) }
             ])
             break
           case 'task_completed_other_session':
@@ -185,7 +189,10 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
             break
           case 'task_completed':
             setBackgroundTasks(prev =>
-              prev.filter(t => t.taskId !== msg.task_id)
+              prev.map(t => t.taskId === msg.task_id
+                ? { ...t, status: msg.status === 'ok' ? 'completed' : 'error' }
+                : t
+              )
             )
             break
         }
@@ -218,5 +225,5 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     }
   }, [connect])
 
-  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand }
+  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand, removeBackgroundTask }
 }
