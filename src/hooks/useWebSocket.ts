@@ -1,7 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import type { PipelineState, ChatMessage, WsMessage, ChannelType, CommandTipMessage, BackgroundTask } from '../types'
 
+export const ZEROCLAW_WS_URL = `ws://${location.hostname}:42617/ws/voice`
+
 const BASE_HTTP = location.origin
+
+function float32ToBase64Pcm(float32: Float32Array): string {
+  const int16 = new Int16Array(float32.length)
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]))
+    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+  }
+  const bytes = new Uint8Array(int16.buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
 
 export interface VadState {
   isSpeech: boolean
@@ -48,6 +64,11 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     if (trimmed) send({ type: 'text_input', text: trimmed })
   }, [send])
 
+  const sendVadEnd = useCallback((pcmFloat32: Float32Array) => {
+    const pcm = float32ToBase64Pcm(pcmFloat32)
+    send({ type: 'vad_end', pcm })
+  }, [send])
+
   useEffect(() => { sessionKeyRef.current = sessionKey }, [sessionKey])
   useEffect(() => { channelRef.current = channel }, [channel])
   useEffect(() => { onSessionUpdatedRef.current = onSessionUpdated }, [onSessionUpdated])
@@ -88,6 +109,22 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     setBackgroundTasks(prev => prev.filter(t => t.taskId !== taskId))
   }, [])
 
+
+  const syncBackgroundTasks = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE_HTTP}/oc/tasks`)
+      const data = await res.json()
+      if (data.tasks) {
+        setBackgroundTasks(data.tasks.map((t: { task_id: string; description: string; status: string; started_at?: number }) => ({
+          taskId: t.task_id,
+          description: t.description,
+          status: t.status === 'running' ? 'running' : t.status === 'error' ? 'error' : 'completed',
+          startedAt: t.started_at ?? Math.floor(Date.now() / 1000),
+        })))
+      }
+    } catch { /* ignore */ }
+  }, [])
+
   const connect = useCallback(() => {
     if (!isMountedRef.current) return
 
@@ -98,6 +135,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
       if (!isMountedRef.current) return
       setConnected(true)
       retryCountRef.current = 0
+      syncBackgroundTasks()
     }
 
     ws.onmessage = (event) => {
@@ -195,6 +233,17 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
               )
             )
             break
+          case 'stt.result':
+            setHistory(h => [...h, { role: 'user', text: msg.text }])
+            setSubtitle('')
+            break
+          case 'llm.delta':
+            setSubtitle(s => s + msg.text)
+            break
+          case 'llm.done':
+            setHistory(h => [...h, { role: 'assistant', text: msg.full_response }])
+            setSubtitle('')
+            break
         }
       } catch {
         // ignore malformed messages
@@ -213,7 +262,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     ws.onerror = () => {
       ws.close()
     }
-  }, [url, loadSessionHistory])
+  }, [url, loadSessionHistory, syncBackgroundTasks])
 
   useEffect(() => {
     isMountedRef.current = true
@@ -225,5 +274,5 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     }
   }, [connect])
 
-  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand, removeBackgroundTask }
+  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, sendVadEnd, switchSession, switchChannel, cancelCommand, removeBackgroundTask }
 }

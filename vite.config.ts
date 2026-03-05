@@ -26,5 +26,8 @@ export default defineConfig({
       output: { manualChunks: undefined }
     },
     cssCodeSplit: false,
-  }
+  },
+  optimizeDeps: {
+    exclude: ['onnxruntime-web'],
+  },
 })

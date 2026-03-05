@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useWebSocket } from './hooks/useWebSocket'
+import { useWebSocket, ZEROCLAW_WS_URL } from './hooks/useWebSocket'
 import { usePlatform } from './hooks/usePlatform'
+import { useVad } from './hooks/useVad'
 import { FaceCanvas } from './components/FaceCanvas'
 import { Subtitle } from './components/Subtitle'
 import { ChatHistory } from './components/ChatHistory'
@@ -14,7 +15,7 @@ import { TaskDetailPanel } from './components/TaskDetailPanel'
 import './App.css'
 import type { BackgroundTask } from './types'
 
-const WS_URL = `ws://${location.host}/ws`
+const WS_URL = ZEROCLAW_WS_URL
 
 export default function App() {
   const platform = usePlatform()
@@ -33,7 +34,30 @@ export default function App() {
     sessionBarNotifyRef.current?.(key)
   }, [])
 
-  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, switchSession, switchChannel, cancelCommand, removeBackgroundTask } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
+  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, sendVadEnd, switchSession, switchChannel, cancelCommand, removeBackgroundTask } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
+
+  const sendVadEndRef = useRef(sendVadEnd)
+  useEffect(() => { sendVadEndRef.current = sendVadEnd }, [sendVadEnd])
+
+  const { startVad, stopVad, isSpeaking } = useVad({
+    onSpeechEnd: (audio) => sendVadEndRef.current(audio),
+  })
+
+  // Auto-start/stop VAD in natural mode when connected
+  useEffect(() => {
+    if (connected && mode === 'natural') {
+      startVad()
+    } else {
+      stopVad()
+    }
+  }, [connected, mode, startVad, stopVad])
+
+  // Merge VAD speaking state into vad for VadRing display
+  const vadDisplay = {
+    isSpeech: isSpeaking || vad.isSpeech,
+    probability: isSpeaking ? 0.8 : vad.probability,
+  }
+
   const [detailTask, setDetailTask] = useState<BackgroundTask | null>(null)
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -120,7 +144,7 @@ export default function App() {
         </div>
 
         <div className="ptt-container">
-          <VadRing vad={vad} size={72} />
+          <VadRing vad={vadDisplay} size={72} />
           <button
             className={`btn-ptt ${isPttRecording ? 'recording' : ''} ${mode !== 'ptt' ? 'inactive' : ''}`}
             onTouchStart={handlePttDown}
