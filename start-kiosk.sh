@@ -1,6 +1,6 @@
 #!/bin/bash
 # 在 Jetson 上运行此脚本启动全屏 Kiosk 浏览器
-# 前端由 voice/server.py (FastAPI :8080) 直接 serve
+# 前端由 ZeroClaw Gateway (Axum :42617) 通过 rust-embed serve
 # 用法: bash start-kiosk.sh
 
 pkill -f chromium 2>/dev/null || true
@@ -20,4 +20,4 @@ DISPLAY=:1 chromium-browser \
   --disable-session-crashed-bubble \
   --disable-gpu \
   --disable-dev-shm-usage \
-  "http://localhost:8080/"
+  "http://localhost:42617/"

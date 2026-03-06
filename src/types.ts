@@ -43,6 +43,11 @@ export type WsMessage =
   | { type: 'stt.result'; text: string }
   | { type: 'llm.delta'; text: string }
   | { type: 'llm.done'; full_response: string }
+  // Claude Code task events
+  | { type: 'claude_code.started'; task_id: string; task: string; variant: string }
+  | { type: 'claude_code.progress'; task_id: string; event_type: string; summary: string }
+  | { type: 'claude_code.completed'; task_id: string; result: string }
+  | { type: 'claude_code.failed'; task_id: string; error: string }
 
 export interface BackgroundTask {
   taskId: string
@@ -50,6 +55,25 @@ export interface BackgroundTask {
   status: 'running' | 'completed' | 'error'
   startedAt?: number
   ocSessionId?: string | null
+}
+
+/** A single progress step from a Claude Code task. */
+export interface ClaudeCodeStep {
+  eventType: 'assistant' | 'tool_use' | 'tool_result'
+  summary: string
+  timestamp: number
+}
+
+/** Tracks a running or completed Claude Code task with its progress steps. */
+export interface ClaudeCodeTask {
+  taskId: string
+  task: string
+  variant: string
+  status: 'running' | 'completed' | 'error'
+  steps: ClaudeCodeStep[]
+  result?: string
+  error?: string
+  startedAt: number
 }
 
 export interface OcTodo {

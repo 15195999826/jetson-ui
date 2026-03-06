@@ -34,7 +34,7 @@ export default function App() {
     sessionBarNotifyRef.current?.(key)
   }, [])
 
-  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, sendVadEnd, switchSession, switchChannel, cancelCommand, removeBackgroundTask } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
+  const { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, claudeCodeTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, sendVadEnd, switchSession, switchChannel, cancelCommand, removeBackgroundTask, removeClaudeCodeTask } = useWebSocket(WS_URL, handleSessionUpdated, handleSessionDeleted, handleSessionSwitched)
 
   const sendVadEndRef = useRef(sendVadEnd)
   useEffect(() => { sendVadEndRef.current = sendVadEnd }, [sendVadEnd])
@@ -201,7 +201,7 @@ export default function App() {
           </button>
         </div>
         <SessionBar currentKey={sessionKey} channel={channel} onSwitch={switchSession} notifyRef={sessionBarNotifyRef} deleteNotifyRef={sessionBarDeleteRef} />
-        <TaskIndicator tasks={backgroundTasks} onViewDetail={setDetailTask} />
+        <TaskIndicator tasks={backgroundTasks} claudeCodeTasks={claudeCodeTasks} onViewDetail={setDetailTask} onRemoveClaudeTask={removeClaudeCodeTask} />
 
         {platform === 'desktop' ? (
           <>

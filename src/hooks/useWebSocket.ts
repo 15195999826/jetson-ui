@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { PipelineState, ChatMessage, WsMessage, ChannelType, CommandTipMessage, BackgroundTask } from '../types'
+import type { PipelineState, ChatMessage, WsMessage, ChannelType, CommandTipMessage, BackgroundTask, ClaudeCodeTask } from '../types'
 
 export const ZEROCLAW_WS_URL = `ws://${location.hostname}:42617/ws/voice`
 
@@ -36,6 +36,7 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
   const [commandTip, setCommandTip] = useState<CommandTipMessage[] | null>(null)
   const [backgroundTasks, setBackgroundTasks] = useState<BackgroundTask[]>([])
   const [toast, setToast] = useState<string | null>(null)
+  const [claudeCodeTasks, setClaudeCodeTasks] = useState<ClaudeCodeTask[]>([])
 
   const wsRef = useRef<WebSocket | null>(null)
   const onSessionUpdatedRef = useRef(onSessionUpdated)
@@ -107,6 +108,10 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
 
   const removeBackgroundTask = useCallback((taskId: string) => {
     setBackgroundTasks(prev => prev.filter(t => t.taskId !== taskId))
+  }, [])
+
+  const removeClaudeCodeTask = useCallback((taskId: string) => {
+    setClaudeCodeTasks(prev => prev.filter(t => t.taskId !== taskId))
   }, [])
 
 
@@ -244,6 +249,41 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
             setHistory(h => [...h, { role: 'assistant', text: msg.full_response }])
             setSubtitle('')
             break
+          // ── Claude Code task events ──
+          case 'claude_code.started':
+            setClaudeCodeTasks(prev => [...prev, {
+              taskId: msg.task_id,
+              task: msg.task,
+              variant: msg.variant,
+              status: 'running',
+              steps: [],
+              startedAt: Date.now(),
+            }])
+            break
+          case 'claude_code.progress':
+            setClaudeCodeTasks(prev => prev.map(t =>
+              t.taskId === msg.task_id
+                ? { ...t, steps: [...t.steps, { eventType: msg.event_type as 'assistant' | 'tool_use' | 'tool_result', summary: msg.summary, timestamp: Date.now() }] }
+                : t
+            ))
+            break
+          case 'claude_code.completed':
+            setClaudeCodeTasks(prev => prev.map(t =>
+              t.taskId === msg.task_id
+                ? { ...t, status: 'completed', result: msg.result }
+                : t
+            ))
+            // Also add result to chat history
+            setHistory(h => [...h, { role: 'assistant', text: msg.result || '(task completed)' }])
+            break
+          case 'claude_code.failed':
+            setClaudeCodeTasks(prev => prev.map(t =>
+              t.taskId === msg.task_id
+                ? { ...t, status: 'error', error: msg.error }
+                : t
+            ))
+            setHistory(h => [...h, { role: 'assistant', text: `Claude Code error: ${msg.error}` }])
+            break
         }
       } catch {
         // ignore malformed messages
@@ -274,5 +314,5 @@ export function useWebSocket(url: string, onSessionUpdated?: (key: string) => vo
     }
   }, [connect])
 
-  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, sendVadEnd, switchSession, switchChannel, cancelCommand, removeBackgroundTask }
+  return { state, mode, subtitle, history, connected, sessionKey, channel, vad, commandTip, backgroundTasks, claudeCodeTasks, toast, sendPttStart, sendPttStop, sendSetMode, sendText, sendVadEnd, switchSession, switchChannel, cancelCommand, removeBackgroundTask, removeClaudeCodeTask }
 }
